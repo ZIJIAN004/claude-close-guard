@@ -1,0 +1,24 @@
+# claude-close-guard configuration
+# Default location: ~/.claude-close-guard/config.yaml
+
+memory_dir: ~/.claude-close-guard/memory
+vector_db: ~/.claude-close-guard/vectors.sqlite
+
+embedding_model: BAAI/bge-base-zh-v1.5
+embedding_device: cpu  # or "cuda" if available
+
+summarizer_model: claude-haiku-4-5-20251001
+summarizer_max_tokens: 2000
+
+# Windows class names that AHK should intercept
+target_window_classes:
+  - CASCADIA_HOSTING_WINDOW_CLASS  # Windows Terminal
+  - ConsoleWindowClass              # conhost / legacy
+
+mcp_top_k: 5
+mcp_hybrid_alpha: 0.5  # 0=BM25 only, 1=vector only
+
+# Show summary popup even when transcript is short (< this many turns -> skip)
+min_turns_to_prompt: 3
+
+ui_window_size: "720x540"

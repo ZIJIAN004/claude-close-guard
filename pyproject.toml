@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claude-close-guard"
+version = "0.1.0"
+description = "Physically intercept Claude Code terminal close events, summarize the conversation, and curate memories."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "claude-close-guard contributors" }]
+dependencies = [
+    "anthropic>=0.40.0",
+    "pyyaml>=6.0",
+    "sentence-transformers>=2.7.0",
+    "sqlite-vec>=0.1.6",
+    "mcp>=1.2.0",
+    "click>=8.1.0",
+    "rank-bm25>=0.2.2",
+    "portalocker>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+ccg = "claude_close_guard.cli:main"
+claude-close-guard = "claude_close_guard.close_handler:main"
+ccg-mcp = "claude_close_guard.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["claude_close_guard"]
