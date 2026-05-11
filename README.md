@@ -1,74 +1,136 @@
 # claude-close-guard
 
-> 关闭 Claude Code 终端窗口时弹一个原生窗口，汇报本次对话核心内容，让你决定写入哪些记忆。
+> 关闭 Claude Code 终端时弹一个小窗，回顾本次对话核心内容，让你选要保存哪些到长期记忆。新会话里 Claude 通过 MCP 自动检索之前留下的记忆。
 
-工作机制分两层：
+适用于 Windows + PowerShell / Windows Terminal 下使用 Claude Code 的人。装好后不需要在结束对话前手动复制粘贴重要结论——关窗时自然会问你。
 
-| 触发方式 | 拦截方式 | 能否取消关闭 | 弹窗时机 |
-|---|---|---|---|
-| **Alt+F4** | AHK Hotkey 同步拦截 | ✅ 能 | 关闭前 |
-| **鼠标点 X / 任务栏关闭** | PowerShell `SetConsoleCtrlHandler`（需用 `ccg-claude` 启动）| ❌ 关闭无法撤销 | 关闭后立即弹窗 |
+---
 
-弹窗里会显示：
+## 它能做什么
 
-- 本次对话的 headline（一句话总结）
-- 3-6 条 bullet 列出过程要点
-- 候选记忆条目（带类型 user/feedback/project/reference），勾选要保存的项
+- **Alt+F4 关终端** → 阻塞弹窗，可"取消关闭"或"保存并关闭"
+- **鼠标点 ×、任务栏关闭** → 终端关掉后立即弹独立窗口让你选记忆（用 `ccg-claude` 启动 Claude Code 才有此层）
+- **多窗口同时关** → 自动聚合成单个弹窗（带左右切换），不会爆 N 个对话框
+- **保存的记忆** → 写为 markdown + sqlite-vec 向量索引；MCP server 把 `search_memory` / `list_memories` 工具注入 Claude Code，新对话里 LLM 自己会调
+- **总结模型** → 默认 `claude -p` 复用 Claude Code 现有 OAuth，无需另设 API key
 
-记忆库是 markdown + sqlite-vec 双存储，并通过 MCP server 把 `search_memory` / `list_memories` 暴露给 Claude Code，让 LLM 在新对话里自动拉取相关旧记忆。
+弹窗界面是暗色等宽风（Cascadia Mono + Claude orange），与 PowerShell 窗体观感统一。
+
+---
+
+## 快速开始
+
+```powershell
+git clone https://github.com/ZIJIAN004/claude-close-guard.git
+cd claude-close-guard
+.\scripts\install.ps1
+```
+
+打开新的 PowerShell，用 `ccg-claude` 启动 Claude Code（替代 `claude`）：
+
+```powershell
+ccg-claude
+```
+
+聊几轮，然后随便用什么方式关终端（Alt+F4 / ×）。弹窗里勾上你想留的记忆条目，点 `save & close`。
 
 ---
 
 ## 系统要求
 
-- Windows 10 / 11
-- Python ≥ 3.10
-- AutoHotkey v2（用于 Alt+F4 拦截，可选但推荐）
-- Claude Code CLI（可选，仅为 MCP 自动注册）
-- `ANTHROPIC_API_KEY` 环境变量（总结调 Claude Haiku）
+| 必需 | 用途 |
+|---|---|
+| Windows 10 / 11 | AHK + ConsoleCtrlHandler 是 Windows-only |
+| Python ≥ 3.10 | 主运行时 |
+| Claude Code CLI（已登录 OAuth） | 总结调用 `claude -p`，MCP 自动注册 |
 
-首次搜索/弹窗时会下载 `BAAI/bge-base-zh-v1.5`（约 400 MB）到 HuggingFace 缓存。
+| 可选 | 用途 |
+|---|---|
+| AutoHotkey v2 | Alt+F4 同步拦截（缺它只剩"事后弹窗"层） |
+| `ANTHROPIC_API_KEY` | 没安装 Claude Code CLI 时的总结回退路径 |
+| CUDA GPU | 想加速 embedding，可把 `embedding_device` 改成 `cuda` |
+
+首次运行 `ccg search` 或 MCP server 时会下载 `BAAI/bge-base-zh-v1.5`（约 400 MB）到 HuggingFace 缓存目录。
 
 ---
 
 ## 安装
 
+### 自动安装（推荐）
+
 ```powershell
-git clone https://github.com/<your-name>/claude-close-guard.git
-cd claude-close-guard
 .\scripts\install.ps1
 ```
 
-`install.ps1` 会做：
+`install.ps1` 做的事：
 
-1. 在 `~/.claude-close-guard/.venv/` 创建 venv 并 `pip install -e .`
-2. 写默认配置 `~/.claude-close-guard/config.yaml` 和 `ahk.cfg`
-3. 把 AHK 脚本注册成开机自启快捷方式（在 `shell:startup`），并立即启动一份
-4. 把 `ccg-claude` shim 放到 `~/.claude-close-guard/bin/`，并加进用户 PATH
-5. 调用 `claude mcp add ccg-memory` 把 MCP server 写进 Claude Code 用户级配置
+1. 在 `~/.claude-close-guard/.venv/` 建 venv，先装 CPU-only torch（避免装到 2.5 GB CUDA 版），然后 `pip install -e .`
+2. 写默认 `config.yaml` 和 `ahk.cfg`（不带 BOM，AHK 才认）
+3. 把 `ccg.cmd` / `ccg-mcp.cmd` / `ccg-claude.cmd` shim 拷到 `~/.claude-close-guard/bin/`，并把这个 bin 目录加进用户 PATH
+4. 调 `claude mcp add ccg-memory --scope user` 把 MCP server 注册到 Claude Code 用户级配置
+5. 找到 AutoHotkey v2 可执行文件（搜索 `Program Files` 与 `LOCALAPPDATA` 两处），在启动文件夹放一个快捷方式开机自启 AHK 脚本，并立即起一份
 
-可选参数：`-NoMcp`（跳过 MCP 注册）、`-NoStartup`（跳过 AHK 自启）。
+可选参数：
+
+- `-NoMcp` 跳过 MCP 注册
+- `-NoStartup` 跳过 AHK 自启快捷方式
+
+### 仅手动验证
+
+```powershell
+ccg path                     # 应输出记忆目录
+ccg list                     # 列出已有记忆（首次为空）
+claude mcp list              # 应能看到 ccg-memory
+```
 
 ---
 
 ## 使用
 
-装完即用：
+### 三种使用流
 
-- **Alt+F4 关闭终端** → 弹窗，可取消可确认
-- **用 `ccg-claude` 启动 Claude Code**（替代 `claude` 命令） → 鼠标点 X 关闭时仍会弹窗（事后弹），可保存记忆
-- **新对话里说"上次我们决定的那个 X"** → Claude 会通过 MCP 自动调 `search_memory` 拿到对应记忆
+**1) Alt+F4 流（同步阻塞）**
 
-CLI 工具：
+任何在 Windows Terminal / conhost 里运行的 Claude Code 都受 AHK 守护。按 Alt+F4 后弹窗会**阻塞 Alt+F4**——你可以取消、也可以确认。需要 AutoHotkey v2 已装且 `install.ps1` 跑过。
+
+**2) 鼠标点 × 流（事后弹窗）**
+
+Windows 不允许外部进程拦截 × 按钮（系统限制，除非 DLL 注入）。所以这一层走另一种方案：
 
 ```powershell
-ccg list                  # 列出所有记忆
-ccg list --type feedback  # 按类型过滤
-ccg search "POMO"         # 混合检索（BM25 + 向量）
-ccg show feedback_x.md    # 看完整内容
-ccg reindex               # 修改 md 后重建向量索引
-ccg path                  # 打印记忆库路径
+ccg-claude        # 替代直接 `claude` 命令
 ```
+
+`ccg-claude` 是个 PowerShell 包装器，它在子进程里注册 `SetConsoleCtrlHandler`。当 Windows 发 `CTRL_CLOSE_EVENT` 时，handler 在主进程被回收前 fork 一个独立 pythonw 进程，用 `UseShellExecute=true` 启动——所以终端死了，弹窗活着。
+
+**3) MCP 检索流（新会话里）**
+
+新开 Claude Code 对话，说"我之前怎么处理 X 的"或者"上次我们决定的那个方案"。LLM 看到 `search_memory` 工具会主动调用，返回最相关的 markdown 内容。
+
+也可以手动用 CLI 验证：
+
+```powershell
+ccg search "POMO"
+ccg search "深度学习训练 GPU 配置" --top-k 10
+```
+
+### CLI 命令
+
+```powershell
+ccg list                    # 列出全部记忆
+ccg list --type feedback    # 按类型过滤（user/feedback/project/reference）
+ccg search "<query>"        # BM25 + 向量混合检索
+ccg show feedback_xxx.md    # 看某条完整内容
+ccg reindex                 # 手动改了 md 后重建向量索引
+ccg path                    # 打印记忆目录路径
+```
+
+### MCP 工具（Claude Code 自动调）
+
+| 工具 | 参数 | 作用 |
+|---|---|---|
+| `search_memory` | `query: string, top_k: int = 5` | 混合检索，返回 markdown 片段 |
+| `list_memories` | `type_filter: string \| None` | 按类型列举 |
 
 ---
 
@@ -81,21 +143,119 @@ memory_dir: ~/.claude-close-guard/memory
 vector_db: ~/.claude-close-guard/vectors.sqlite
 
 embedding_model: BAAI/bge-base-zh-v1.5
-embedding_device: cpu              # cuda 也可
+embedding_device: cpu                    # cuda 可加速
 summarizer_model: claude-haiku-4-5-20251001
 summarizer_max_tokens: 2000
 
-target_window_classes:              # AHK Alt+F4 只对这些窗口类生效
-  - CASCADIA_HOSTING_WINDOW_CLASS   # Windows Terminal
-  - ConsoleWindowClass              # conhost / 旧式
+target_window_classes:                   # AHK Alt+F4 只对这些窗口类生效
+  - CASCADIA_HOSTING_WINDOW_CLASS        # Windows Terminal
+  - ConsoleWindowClass                   # conhost / 旧式
 
 mcp_top_k: 5
-mcp_hybrid_alpha: 0.5               # 0=纯 BM25, 1=纯向量
-min_turns_to_prompt: 3              # 短于此对话不触发总结
-ui_window_size: "720x540"
+mcp_hybrid_alpha: 0.5                    # 0=纯 BM25, 1=纯向量
+min_turns_to_prompt: 3                   # 短于此轮数不触发总结
+ui_window_size: "780x600"
 ```
 
-**记忆库膨胀到 5000 条以上时**，可换成 `BAAI/bge-m3` 或 `Qwen/Qwen3-Embedding-0.6B`（只需改 `embedding_model` 后跑 `ccg reindex`）。
+**记忆库膨胀到 5000 条以上**：换成 `BAAI/bge-m3` 或 `Qwen/Qwen3-Embedding-0.6B`，改 `embedding_model` 后跑 `ccg reindex`。
+
+**想换总结模型**：改 `summarizer_model`。这个值通过 `--model` 传给 `claude -p`。
+
+---
+
+## 记忆格式
+
+每条记忆是一个 markdown 文件，YAML frontmatter 描述元信息：
+
+```markdown
+---
+name: tsp-depot-as-node
+description: TSP eval 时 depot 作为普通节点喂入 POMO，不剥离
+type: feedback
+---
+
+TSP 评估时 depot 直接作为普通节点喂入 POMO，不剥离
+
+**Why:** 保证模型感知出发点
+**How to apply:** 任何 TSP / VRP eval pipeline 不要预处理 depot
+```
+
+四种类型：
+
+| type | 用途 |
+|---|---|
+| `user` | 用户角色、知识背景、偏好 |
+| `feedback` | 用户给的工作方式指导（修正 or 验证过的方法） |
+| `project` | 正在做的事、决策、deadline、动机 |
+| `reference` | 外部系统的指针（Linear 项目、Grafana 看板） |
+
+`INDEX.md` 由 `update_index()` 自动生成，按 type 分节。
+
+---
+
+## 工作原理
+
+```
+                        Alt+F4
+                          │
+          ┌───────────────▼───────────────┐
+          │  ahk\close_guard.ahk          │
+          │  RunWait → python -m ...      │  exit 0 = 放行 / 1 = 取消
+          └───────────────┬───────────────┘
+                          │
+[ 鼠标点 × / 任务栏关闭 ]─►│
+   │                       │ python -m claude_close_guard.close_handler
+   │  (ccg-claude wrapper) │   --pid <pid> [--post-close]
+   │  ConsoleCtrlHandler   │
+   ▼                       ▼
+   spawn detached ──────►  ┌──────────────────────────┐
+                           │ close_handler            │
+                           │  · portalocker 抢 master │
+                           │  · 800 ms debounce       │
+                           │  · 扫 queue/ 收所有 PID  │
+                           │  · 并发后台总结          │
+                           │  · tkinter 聚合弹窗      │
+                           │  · 写 done/<pid>.txt     │
+                           └────────┬─────────────────┘
+                                    │
+                                    ▼
+                           memory_store: md + sqlite-vec
+                                    ▲
+                                    │ search_memory / list_memories
+                           ┌────────┴─────────────────┐
+                           │ MCP server (stdio)       │
+                           └──────────────────────────┘
+                                    ▲
+                                    │ tool call
+                           Claude Code 新对话
+```
+
+**多窗口同时关 → 单弹窗** 的实现：每个被关闭的窗口都把自己 PID 写进 `state/queue/<pid>.json`，然后竞争 `master.lock`（portalocker），抢到的进程睡 800 ms 收齐所有同批关闭，渲染单个聚合 UI；其它进程作为 worker 轮询 `state/done/<pid>.txt` 等待结果。
+
+---
+
+## 故障排查
+
+| 症状 | 原因 + 处理 |
+|---|---|
+| Alt+F4 没弹窗 | `tasklist /fi "imagename eq AutoHotkey64.exe"` 看 AHK 在不在；不在就手动启动 `ahk\close_guard.ahk` 或检查 `~/.claude-close-guard/ahk.log` |
+| 鼠标点 × 不弹窗 | 确认你是用 `ccg-claude` 启动的，不是 `claude`；只有 wrapper 注册了 ConsoleCtrlHandler |
+| `ccg-claude` 报"cannot locate python" | 多半是 `ahk.cfg` 带了 UTF-8 BOM。重跑 `install.ps1` 或用 `[System.IO.File]::WriteAllText` 重写该文件 |
+| 总结很慢（30s+） | `config.yaml` 的 `summarizer_model` 改成 haiku，或检查 `~/.claude-close-guard/close-guard.log` 看哪一步慢 |
+| `TypeError: Could not resolve authentication method` | Claude Code CLI 没登录。运行一次 `claude` 走完 `/login`，或设 `ANTHROPIC_API_KEY` 走 SDK 回退 |
+| `ccg-mcp` 在 Claude Code 里卡住 | pip 的 console_scripts launcher 在 Windows 多进程下会死锁。`install.ps1` 已经用 `.cmd` shim 绕过；如果你手动注册过 MCP，删了重跑 `install.ps1` |
+| 中文搜索质量差 | 检查 `embedding_model` 是不是 zh 模型；非中文项目可换成 `BAAI/bge-m3` 通吃多语 |
+
+日志：`~/.claude-close-guard/close-guard.log`（close_handler 主流程）+ `~/.claude-close-guard/ahk.log`（AHK 调用记录）。
+
+---
+
+## 已知限制
+
+- **鼠标点 × 无法事前拦截**：Windows 把 `NCLBUTTONUP` → `SC_CLOSE` → `WM_CLOSE` 全在目标进程内完成，外部进程没机会插入；除非做 DLL injection（不在本项目范围）。用"事后弹窗"代替——窗口死了，弹窗进程独立活着。
+- **关机 / 注销时**：进程被 `SIGTERM` 强杀，AHK / ConsoleCtrlHandler 都来不及反应。
+- **Linux / macOS**：暂不支持。AHK 是 Windows-only；Linux 上窗口管理器各异需要单独适配。
+- **MCP server 冷启动 ~3 秒**：sentence-transformers 加载 BGE 模型有开销，首次 `search_memory` 会感觉慢。
 
 ---
 
@@ -105,57 +265,18 @@ ui_window_size: "720x540"
 .\scripts\uninstall.ps1
 ```
 
-记忆库 (`~/.claude-close-guard/memory/`) 和 venv 不会被删，需要的话手动清理。
+会清掉 venv、PATH、AHK 自启快捷方式、MCP 注册。**记忆库 `~/.claude-close-guard/memory/` 和 vector DB 保留**，需要的话手动删。
 
 ---
 
-## 架构
+## 隐私
 
-```
-                        Alt+F4
-                          │
-          ┌───────────────▼───────────────┐
-          │  ahk\close_guard.ahk          │
-          │  RunWait → python -m ...      │  exit 0=放行  exit 1=取消
-          └───────────────┬───────────────┘
-                          │
-[ X / 任务栏关闭 ] ───────►│
-   │                       │ python -m claude_close_guard.close_handler
-   │  (ccg-claude wrapper) │   --pid <pid> [--post-close]
-   │  ConsoleCtrlHandler   │
-   ▼                       ▼
-   spawn detached ──────►  ┌──────────────────────────┐
-                           │ close_handler 主流程     │
-                           │  · portalocker → master  │
-                           │  · 800 ms debounce       │
-                           │  · 扫 queue 收所有 PID   │
-                           │  · 后台并行总结          │
-                           │  · tkinter 聚合弹窗      │
-                           │  · 写 done/<pid>.txt     │
-                           └────────┬─────────────────┘
-                                    │
-                                    ▼
-                           memory_store: md + sqlite-vec
-                                    ▲
-                                    │ search_memory
-                           ┌────────┴─────────────────┐
-                           │ MCP server (stdio)       │
-                           └──────────────────────────┘
-                                    ▲
-                                    │ tool call
-                           Claude Code 新对话
-```
-
----
-
-## 已知限制
-
-- **鼠标点 X 无法"事前拦截"**：Windows 把 NCLBUTTONUP → SC_CLOSE → WM_CLOSE 全在目标进程内部完成，外部进程拦不住，除非做 DLL injection。本工具用"事后弹窗"代替——窗口关掉，独立弹窗进程继续问你要不要保存记忆。
-- **关机/注销时**：进程被 SIGTERM 强杀，AHK / ConsoleCtrlHandler 都来不及反应。
-- **Linux/macOS**：暂未支持，AHK 是 Windows-only。
+- 总结调用走你本机的 `claude` CLI（OAuth）或 `ANTHROPIC_API_KEY`，对话内容会发到 Anthropic API
+- embedding 完全本地，不出网（除了首次下载模型）
+- 没有任何遥测；本项目不联网除非你显式调 `ccg search`
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
