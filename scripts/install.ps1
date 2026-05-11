@@ -40,7 +40,8 @@ Write-Host "==> Installing project (pip install -e)" -ForegroundColor Cyan
 
 # Install CPU-only torch first (default PyPI torch is the CUDA build, ~2.5 GB).
 # If the user wants GPU, they can `pip install torch --index-url ...` themselves.
-$haveTorch = (& $PythonExe -c "import importlib, sys; sys.exit(0 if importlib.util.find_spec('torch') else 1)" 2>$null; $LASTEXITCODE -eq 0)
+& $PythonExe -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('torch') else 1)" 2>$null
+$haveTorch = ($LASTEXITCODE -eq 0)
 if (-not $haveTorch) {
     Write-Host "    installing CPU-only torch (~200 MB)..." -ForegroundColor DarkGray
     & $PythonExe -m pip install --index-url https://download.pytorch.org/whl/cpu torch
@@ -57,17 +58,24 @@ if (-not (Test-Path $DefaultConfig)) {
 }
 Set-Content -Path (Join-Path $ConfigDir 'ahk.cfg') -Value $PythonwExe -Encoding UTF8
 
-# 3) MCP registration (best effort — only if `claude` is on PATH)
+# 3a) Install .cmd wrappers in bin/ early (MCP registration in 3b needs them).
+$BinDir = Join-Path $ConfigDir 'bin'
+if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir | Out-Null }
+foreach ($f in @('ccg.cmd', 'ccg-mcp.cmd', 'ccg-claude.cmd', 'ccg-claude.ps1')) {
+    Copy-Item (Join-Path $RepoRoot "powershell\$f") (Join-Path $BinDir $f) -Force
+}
+
+# 3b) MCP registration (best effort — only if `claude` is on PATH)
 if (-not $NoMcp) {
     $claude = Get-Command claude -ErrorAction SilentlyContinue
     if ($claude) {
         Write-Host "==> Registering MCP server (ccg-memory)" -ForegroundColor Cyan
-        $ccgMcp = Join-Path $VenvDir 'Scripts\ccg-mcp.exe'
-        if (-not (Test-Path $ccgMcp)) { $ccgMcp = "$PythonExe -m claude_close_guard.mcp_server" }
+        # Use the .cmd wrapper, not pip's ccg-mcp.exe — see ccg.cmd comment for why.
+        $ccgMcpCmd = Join-Path $ConfigDir 'bin\ccg-mcp.cmd'
         try {
             & $claude.Source mcp remove ccg-memory 2>&1 | Out-Null
         } catch { }
-        & $claude.Source mcp add ccg-memory --scope user -- $ccgMcp
+        & $claude.Source mcp add ccg-memory --scope user -- $ccgMcpCmd
     } else {
         Write-Host "    (skipped — 'claude' CLI not on PATH; register the MCP server manually later)" -ForegroundColor Yellow
     }
@@ -103,12 +111,7 @@ if (-not $NoStartup) {
     }
 }
 
-# 5) ccg-claude shim on PATH (both .ps1 and .cmd so it works from anywhere)
-$BinDir = Join-Path $ConfigDir 'bin'
-if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir | Out-Null }
-Copy-Item (Join-Path $RepoRoot 'powershell\ccg-claude.ps1') (Join-Path $BinDir 'ccg-claude.ps1') -Force
-Copy-Item (Join-Path $RepoRoot 'powershell\ccg-claude.cmd') (Join-Path $BinDir 'ccg-claude.cmd') -Force
-
+# 5) Add bin/ to user PATH (wrappers already copied in step 3a).
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if ($UserPath -notlike "*$BinDir*") {
     [Environment]::SetEnvironmentVariable('Path', "$UserPath;$BinDir", 'User')
