@@ -18,6 +18,48 @@
 
 ---
 
+## 界面预览
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║  claude-close-guard  ·  save memories                       ◀ 1 / 2 ▶ ║
+╟───────────────────────────────────────────────────────────────────────╢
+║                                                                       ║
+║  ❯  PID 12345  ·  POMO-Entropy                                        ║
+║                                                                       ║
+║  POMO PRM gap analysis + minimum verification plan                    ║   ← headline (Claude orange)
+║                                                                       ║
+║  ─  Confirmed depot signal gap and weak-early/strong-late curve       ║
+║  ─  Decision: do not strip depot, feed it as a normal node            ║
+║  ─  Next: small-model GRPO+POMO vs SFT+GRPO comparison                ║
+║  ─  Deadline: 2026-04-30 — RL + latent-reasoning milestone            ║
+║                                                                       ║
+║  ───────────────────────────────────────────────────────────────────  ║
+║  memory candidates                                                    ║
+║                                                                       ║
+║  ┌─────────────────────────────────────────────────────────────────┐  ║
+║  │ [x]  project   pomo-prm-known-gaps                              │  ║
+║  │      POMO PRM has two known gaps to revisit after first run    │  ║
+║  │      depot signal missing + early curve weak, late curve …     │  ║
+║  └─────────────────────────────────────────────────────────────────┘  ║
+║                                                                       ║
+║  ┌─────────────────────────────────────────────────────────────────┐  ║
+║  │ [x]  feedback  tsp-depot-as-node                                │  ║
+║  │      TSP eval feeds depot as a normal node into POMO            │  ║
+║  │      Why: model must perceive starting point …                  │  ║
+║  └─────────────────────────────────────────────────────────────────┘  ║
+║                                                                       ║
+╟───────────────────────────────────────────────────────────────────────╢
+║  esc to cancel  ·  enter to confirm       [ cancel close ][ save & close ]
+╚═══════════════════════════════════════════════════════════════════════╝
+```
+
+颜色映射：headline = Claude orange `#d97757`；`[project]` 绿 `#a3be8c`、`[feedback]` 橙 `#d97757`、`[user]` 蓝 `#5fafef`、`[reference]` 紫 `#b48ead`；底色 `#1e1e1e`，候选卡片 `#252526`。
+
+多窗口同时关闭时顶部右上出现 `◀ 1/2 ▶` 切换器，只有一个会话时隐藏。
+
+---
+
 ## 快速开始
 
 ```powershell
