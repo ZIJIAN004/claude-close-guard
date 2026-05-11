@@ -32,7 +32,10 @@ class Embedder:
     @property
     def dim(self) -> int:
         m = self._ensure_loaded()
-        return int(m.get_sentence_embedding_dimension())
+        # sentence-transformers 5.x renamed this. Fall back for older versions.
+        getter = getattr(m, "get_embedding_dimension",
+                         getattr(m, "get_sentence_embedding_dimension"))
+        return int(getter())
 
     def encode(self, texts: list[str]) -> list[list[float]]:
         m = self._ensure_loaded()

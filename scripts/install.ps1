@@ -85,8 +85,11 @@ if (-not $NoMcp) {
 if (-not $NoStartup) {
     $ahkExe = $null
     foreach ($p in @(
+        "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe",
         "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey.exe",
         "$env:ProgramFiles\AutoHotkey\AutoHotkey.exe",
+        "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey64.exe",
+        "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey32.exe",
         "$env:LOCALAPPDATA\Programs\AutoHotkey\v2\AutoHotkey.exe"
     )) {
         if (Test-Path $p) { $ahkExe = $p; break }
