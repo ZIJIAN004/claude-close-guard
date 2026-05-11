@@ -56,7 +56,13 @@ if (-not (Test-Path $DefaultConfig)) {
     Copy-Item (Join-Path $RepoRoot 'config.example.yaml') $DefaultConfig
     Write-Host "    wrote $DefaultConfig"
 }
-Set-Content -Path (Join-Path $ConfigDir 'ahk.cfg') -Value $PythonwExe -Encoding UTF8
+# PowerShell 5.1's Set-Content -Encoding UTF8 writes a BOM, which AHK reads
+# back as part of the path. Use raw .NET WriteAllText to avoid the BOM.
+[System.IO.File]::WriteAllText(
+    (Join-Path $ConfigDir 'ahk.cfg'),
+    $PythonwExe,
+    [System.Text.UTF8Encoding]::new($false)
+)
 
 # 3a) Install .cmd wrappers in bin/ early (MCP registration in 3b needs them).
 $BinDir = Join-Path $ConfigDir 'bin'
