@@ -1,18 +1,27 @@
 # claude-close-guard
 
-> 关闭 Claude Code 终端时弹一个小窗，回顾本次对话核心内容，让你选要保存哪些到长期记忆。新会话里 Claude 通过 MCP 自动检索之前留下的记忆。
+> 解决 Claude Code 两个老问题：① 手一抖关窗一晚上对话没了；② auto-memory 什么都塞，记忆库越用越乱。在关闭终端的那一刻强制弹窗，AI 提议 + 人工勾选，写入 markdown + 向量库，新会话通过 MCP 自动召回。
 
 适用于 Windows + PowerShell / Windows Terminal 下使用 Claude Code 的人。装好后不需要在结束对话前手动复制粘贴重要结论——关窗时自然会问你。
 
 ---
 
-## 它能做什么
+## 它解决什么
 
-- **Alt+F4 关终端** → 阻塞弹窗，可"取消关闭"或"保存并关闭"
-- **鼠标点 ×、任务栏关闭** → 终端关掉后立即弹独立窗口让你选记忆（用 `ccg-claude` 启动 Claude Code 才有此层）
-- **多窗口同时关** → 自动聚合成单个弹窗（带左右切换），不会爆 N 个对话框
-- **保存的记忆** → 写为 markdown + sqlite-vec 向量索引；MCP server 把 `search_memory` / `list_memories` 工具注入 Claude Code，新对话里 LLM 自己会调
-- **总结模型** → 默认 `claude -p` 复用 Claude Code 现有 OAuth，无需另设 API key
+**痛点 1 — 误关失救**
+手抖按 Alt+F4，或者点错右上角 ×，一晚上敲定的方案、踩过的坑、决定的下一步全消失。Claude Code 关掉就是真的关掉了。
+
+**痛点 2 — 记忆库膨胀**
+Claude Code 内置的 auto-memory（以及其他全自动记忆工具）会把代码片段、git history、一次性 debug、临时任务状态都往里写。两周后翻不动，三周后没人愿意再看，最终变成杂物间。
+
+**本工具做了什么**
+
+- **关窗瞬间强制总结**：Alt+F4 → 阻塞弹窗可撤销；鼠标点 × → 终端关掉后立即独立弹窗（用 `ccg-claude` 启动才有此层）
+- **AI 提议 + 人工勾选两道关**：summarizer 在 system prompt 里**显式拒绝**写入「代码模式 / git history / 一次性修复 / 临时状态」这些会膨胀但不值得记的类型；再由你二次过滤勾选
+- **多窗口同时关** → 自动聚合成单个弹窗（左右切换），不会爆 N 个对话框
+- **持久化** → markdown（真相源）+ sqlite-vec（向量索引副本）
+- **MCP 自动召回** → `search_memory` / `list_memories` 工具注入 Claude Code，新对话里 LLM 自己调
+- **零额外凭证** → 默认 `claude -p` 复用 Claude Code 现有 OAuth，不需要 API key
 
 弹窗界面是暗色等宽风（Cascadia Mono + Claude orange），与 PowerShell 窗体观感统一。
 
