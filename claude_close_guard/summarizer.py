@@ -161,14 +161,16 @@ def _summarize_via_claude_cli(
     # --output-format=json wraps the real payload under .structured_output.
     # --bare can't be used here: it disables OAuth/keychain reads, requiring
     # ANTHROPIC_API_KEY. We want to reuse Claude Code's existing OAuth session.
+    # Pass the prompt via stdin — on Windows, CreateProcess command-line is capped
+    # at ~32k chars and long transcripts blow that with OSError 206.
     args = [claude_bin, "-p",
             "--output-format", "json",
             "--json-schema", json.dumps(_JSON_SCHEMA)]
     if model:
         args += ["--model", model]
-    args.append(prompt)
     proc = subprocess.run(
         args,
+        input=prompt,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout_s,
     )
@@ -220,7 +222,7 @@ def summarize(
 
     try:
         return _summarize_via_claude_cli(transcript_text, model=model)
-    except (FileNotFoundError, subprocess.TimeoutExpired,
+    except (OSError, subprocess.TimeoutExpired,
             subprocess.SubprocessError, RuntimeError, json.JSONDecodeError) as exc:
         cli_err = f"{type(exc).__name__}: {exc}"
 
