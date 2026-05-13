@@ -152,7 +152,8 @@ def _try_acquire_master():
 
 def _summarize_for_job(job: Job, cfg: Config):
     cwd = Path(job.cwd) if job.cwd else None
-    path, turns = load_turns(cwd)
+    path, turns = load_turns(cwd, pid=job.pid)
+    _log(f"job pid={job.pid} resolved transcript={path}")
     if path is None or len(turns) < cfg.min_turns_to_prompt:
         return _trivial_summary(turns)
     text = render_for_summary(turns)

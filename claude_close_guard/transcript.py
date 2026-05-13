@@ -54,6 +54,79 @@ def find_latest_session_file(cwd: Path | None = None) -> Path | None:
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
+def find_session_files_for_pid(
+    pid: int, cwd_filter: Path | None = None
+) -> list[Path]:
+    """Return jsonl session files currently held open by any process inside
+    the process tree rooted at `pid`, sorted most-recently-modified first.
+
+    The terminal window's owner pid (from AHK) usually owns one or more child
+    `node.exe` processes — the running Claude Code instances. Each Claude
+    instance keeps an open handle to its own session jsonl file, so walking
+    the tree and inspecting `open_files()` gives us the *actual* sessions
+    belonging to that terminal, instead of just the most-recently-touched
+    jsonl in the cwd (which is what mtime-only selection picks, and which
+    breaks when two terminal windows share a cwd).
+    """
+    try:
+        import psutil
+    except ImportError:
+        return []
+    try:
+        root = psutil.Process(pid)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return []
+
+    procs = [root]
+    try:
+        procs.extend(root.children(recursive=True))
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+
+    target_dir: Path | None = None
+    if cwd_filter is not None:
+        target_dir = PROJECTS_ROOT / _encode_cwd(cwd_filter)
+
+    try:
+        projects_root_resolved = PROJECTS_ROOT.resolve()
+    except OSError:
+        projects_root_resolved = PROJECTS_ROOT
+
+    found: dict[Path, float] = {}
+    for p in procs:
+        try:
+            open_files = p.open_files()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        for f in open_files:
+            fp = Path(f.path)
+            if fp.suffix.lower() != ".jsonl":
+                continue
+            try:
+                parent_resolved = fp.parent.resolve()
+            except OSError:
+                continue
+            # Must live under ~/.claude/projects/...
+            if (
+                parent_resolved != projects_root_resolved
+                and projects_root_resolved not in parent_resolved.parents
+            ):
+                continue
+            if target_dir is not None:
+                try:
+                    if parent_resolved != target_dir.resolve():
+                        continue
+                except OSError:
+                    if parent_resolved != target_dir:
+                        continue
+            try:
+                found[fp] = fp.stat().st_mtime
+            except OSError:
+                found[fp] = 0.0
+
+    return sorted(found.keys(), key=lambda x: found[x], reverse=True)
+
+
 def _extract_text(content: object) -> str:
     """Pull plain text out of a message.content field.
 
@@ -110,9 +183,27 @@ def iter_turns(session_file: Path) -> Iterator[Turn]:
             yield Turn(role=role, text=text, timestamp=obj.get("timestamp"))
 
 
-def load_turns(cwd: Path | None = None) -> tuple[Path | None, list[Turn]]:
-    """Load all turns from the latest session. Returns (path, turns)."""
-    path = find_latest_session_file(cwd)
+def load_turns(
+    cwd: Path | None = None, pid: int | None = None
+) -> tuple[Path | None, list[Turn]]:
+    """Load all turns from the session that belongs to the given terminal pid.
+
+    When `pid` is provided we first try to identify the jsonl by walking the
+    terminal's process tree (see `find_session_files_for_pid`). This is the
+    only way to distinguish two Claude Code windows that happen to share a
+    cwd — mtime alone picks whichever was most recently active, which is
+    wrong when the user closes a different window.
+
+    Falls back to the cwd+mtime heuristic if pid lookup yields nothing
+    (psutil missing, process gone, no open jsonl handles, etc.).
+    """
+    path: Path | None = None
+    if pid is not None:
+        candidates = find_session_files_for_pid(pid, cwd_filter=cwd)
+        if candidates:
+            path = candidates[0]
+    if path is None:
+        path = find_latest_session_file(cwd)
     if path is None:
         return None, []
     return path, list(iter_turns(path))
